@@ -21,6 +21,48 @@ MATERIAUX_FIBRES = {
     "Lin": 1500,
 }
 
+def densite_ethanol(T):
+    """Densite de l'ethanol absolu en kg/m3 en fonction de T (°C). Valide 0-60°C."""
+    return 806.35 - 0.8897 * T
+
+def densite_eau(T):
+    """Densite de l'eau distillee en kg/m3 en fonction de T (°C). Valide 0-60°C."""
+    return 999.84 + 0.0265 * T - 0.005425 * T ** 2
+
+def selectionner_liquide(prefix):
+    """Widget de selection du liquide + calcul densite. Retourne rho_liquide en kg/m3."""
+    col_l1, col_l2 = st.columns(2)
+    with col_l1:
+        liquide = st.selectbox(
+            "Liquide d'immersion",
+            ["Ethanol", "Eau distillee", "Personnalise"],
+            key=f"{prefix}_liquide",
+        )
+    with col_l2:
+        if liquide == "Ethanol":
+            temp = st.number_input(
+                "Temperature ethanol (degC)",
+                value=20.0, min_value=5.0, max_value=60.0,
+                step=0.5, format="%.1f", key=f"{prefix}_temp",
+            )
+            rho = densite_ethanol(temp)
+            st.success(f"Densite ethanol a {temp:.1f} °C = **{rho:.2f} kg/m3**")
+        elif liquide == "Eau distillee":
+            temp = st.number_input(
+                "Temperature eau (degC)",
+                value=20.0, min_value=0.0, max_value=60.0,
+                step=0.5, format="%.1f", key=f"{prefix}_temp",
+            )
+            rho = densite_eau(temp)
+            st.success(f"Densite eau a {temp:.1f} °C = **{rho:.2f} kg/m3**")
+        else:
+            rho = st.number_input(
+                "Densite liquide (kg/m3)",
+                value=1000, min_value=500, max_value=2000,
+                key=f"{prefix}_rho_perso",
+            )
+    return rho
+
 RESINES = {
     "Epoxy standard": {"densite": 1200, "ratio_durcisseur": 30},
     "Epoxy aero (RTM6)": {"densite": 1140, "ratio_durcisseur": 0},
@@ -384,24 +426,14 @@ with tab4:
             "Methode par double pesee (principe d'Archimede) : "
             "peser l'echantillon dans l'air puis immerge dans un liquide de densite connue."
         )
-        col_a1, col_a2 = st.columns(2)
-        with col_a1:
-            rho_liquide = st.number_input(
-                "Densite du liquide d'immersion (kg/m3)",
-                value=1000,
-                min_value=500,
-                max_value=2000,
-                key="arch_rho_liq",
-                help="Eau = 1000 kg/m3",
-            )
-        with col_a2:
-            nb_echantillons = st.number_input(
-                "Nombre d'echantillons",
-                value=3,
-                min_value=1,
-                max_value=20,
-                key="arch_nb",
-            )
+        rho_liquide = selectionner_liquide("arch")
+        nb_echantillons = st.number_input(
+            "Nombre d'echantillons",
+            value=3,
+            min_value=1,
+            max_value=20,
+            key="arch_nb",
+        )
 
         st.divider()
         masses_air = []
@@ -503,22 +535,28 @@ with tab5:
     nb_ech5 = st.number_input("Nombre d'echantillons", value=5, min_value=1, max_value=30, key="calc_nb")
 
     st.divider()
+    st.markdown("#### Liquide double pesee *(optionnel — pour calcul densite et porosite)*")
+    rho_liq5 = selectionner_liquide("calc5")
+
+    st.divider()
     st.markdown("#### Saisie des pesees")
 
-    headers = st.columns([1, 2, 2, 2, 2])
+    headers = st.columns([1, 2, 2, 2, 2, 2])
     headers[0].markdown("**Ech.**")
-    headers[1].markdown("**Masse creuset vide (g)**")
-    headers[2].markdown("**Masse creuset + ech. avant calcination (g)**")
-    headers[3].markdown("**Masse air echantillon (g)** *(optionnel, double pesee)*")
-    headers[4].markdown("**Masse creuset + residu apres calcination (g)**")
+    headers[1].markdown("**Creuset vide (g)**")
+    headers[2].markdown("**Creuset + ech. avant (g)**")
+    headers[3].markdown("**Masse air ech. (g)** *(opt.)*")
+    headers[4].markdown("**Masse immergee (g)** *(opt.)*")
+    headers[5].markdown("**Creuset + residu apres (g)**")
 
     m_creuset = []
     m_avant = []
     m_air_opt = []
+    m_imm_opt = []
     m_apres = []
 
     for i in range(nb_ech5):
-        cols = st.columns([1, 2, 2, 2, 2])
+        cols = st.columns([1, 2, 2, 2, 2, 2])
         cols[0].markdown(f"**{i+1}**")
         mc = cols[1].number_input(
             f"creuset_{i}", value=30.00, step=0.01, format="%.2f",
@@ -533,13 +571,19 @@ with tab5:
             key=f"calc_mair_{i}", label_visibility="collapsed",
             help="Laisser a 0 si pas de double pesee",
         )
-        mp = cols[4].number_input(
+        m_imm = cols[4].number_input(
+            f"imm_{i}", value=0.00, step=0.01, format="%.2f",
+            key=f"calc_mimm_{i}", label_visibility="collapsed",
+            help="Masse immergee dans le liquide (0 si non renseignee)",
+        )
+        mp = cols[5].number_input(
             f"apres_{i}", value=33.00, step=0.01, format="%.2f",
             key=f"calc_mp_{i}", label_visibility="collapsed",
         )
         m_creuset.append(mc)
         m_avant.append(ma)
         m_air_opt.append(m_air)
+        m_imm_opt.append(m_imm)
         m_apres.append(mp)
 
     st.divider()
@@ -561,13 +605,16 @@ with tab5:
         vf = 0
         rho_c_calc = 0
         vp = 0
+        double_pesee_ok = m_air_opt[i] > 0 and m_imm_opt[i] > 0 and (m_air_opt[i] - m_imm_opt[i]) > 0
         if m_ech > 0 and rho_f5 > 0 and rho_m5 > 0:
             vol_f = m_fibre / rho_f5
             vol_m = m_resine_perdue / rho_m5
             vol_total_theo = vol_f + vol_m
 
-            if m_air_opt[i] > 0:
-                rho_c_calc = m_air_opt[i] * 1000 / (m_air_opt[i] / 1)  # simplified, actual uses immersion
+            if double_pesee_ok:
+                # Archimede : rho = m_air * rho_liq / (m_air - m_imm)
+                delta_imm = m_air_opt[i] - m_imm_opt[i]
+                rho_c_calc = m_air_opt[i] * rho_liq5 / delta_imm
                 vol_total_reel = m_ech / rho_c_calc if rho_c_calc > 0 else vol_total_theo
             else:
                 vol_total_reel = vol_total_theo
@@ -575,7 +622,7 @@ with tab5:
 
             vf = vol_f / vol_total_reel * 100 if vol_total_reel > 0 else 0
             vm = vol_m / vol_total_reel * 100 if vol_total_reel > 0 else 0
-            vp = 100 - vf - vm if m_air_opt[i] > 0 else 0
+            vp = 100 - vf - vm if double_pesee_ok else 0
 
         results_calc.append({
             "Echantillon": i + 1,

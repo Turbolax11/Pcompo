@@ -625,28 +625,70 @@ with tab5:
     nb_ech5 = st.number_input("Nombre d'echantillons", value=5, min_value=1, max_value=30, key="calc_nb")
 
     st.divider()
-    st.markdown("#### Liquide double pesee *(optionnel — pour calcul densite et porosite)*")
-    rho_liq5 = selectionner_liquide("calc5")
+    st.markdown("#### Methode de calcul de la porosite *(optionnel)*")
+    methode_vp = st.radio(
+        "Methode pour Vp :",
+        ["Aucune (Vf_theo seul, Vp=0 suppose)", "Double pesee Archimede", "Dimensions echantillon (surface x epaisseur)"],
+        horizontal=True, key="calc_methode_vp",
+    )
+
+    rho_liq5 = 1000.0
+    use_dims5 = False
+    surf5_mm2 = ep5_mm = 0.0
+
+    if methode_vp == "Double pesee Archimede":
+        rho_liq5 = selectionner_liquide("calc5")
+    elif methode_vp == "Dimensions echantillon (surface x epaisseur)":
+        use_dims5 = True
+        st.caption("Entrer les dimensions de chaque echantillon dans le tableau ci-dessous.")
 
     st.divider()
     st.markdown("#### Saisie des pesees")
 
-    headers = st.columns([1, 2, 2, 2, 2, 2])
-    headers[0].markdown("**Ech.**")
-    headers[1].markdown("**Creuset vide (g)**")
-    headers[2].markdown("**Creuset + ech. avant (g)**")
-    headers[3].markdown("**Masse air ech. (g)** *(opt.)*")
-    headers[4].markdown("**Masse immergee (g)** *(opt.)*")
-    headers[5].markdown("**Creuset + residu apres (g)**")
+    use_dp = methode_vp == "Double pesee Archimede"
+    use_dim = methode_vp == "Dimensions echantillon (surface x epaisseur)"
+
+    if use_dim:
+        headers = st.columns([1, 2, 2, 2, 2, 2, 2])
+        headers[0].markdown("**Ech.**")
+        headers[1].markdown("**Creuset vide (g)**")
+        headers[2].markdown("**Creuset + ech. avant (g)**")
+        headers[3].markdown("**Creuset + residu apres (g)**")
+        headers[4].markdown("**Largeur (mm)**")
+        headers[5].markdown("**Longueur (mm)**")
+        headers[6].markdown("**Epaisseur (mm)**")
+    elif use_dp:
+        headers = st.columns([1, 2, 2, 2, 2, 2])
+        headers[0].markdown("**Ech.**")
+        headers[1].markdown("**Creuset vide (g)**")
+        headers[2].markdown("**Creuset + ech. avant (g)**")
+        headers[3].markdown("**Masse air ech. (g)**")
+        headers[4].markdown("**Masse immergee (g)**")
+        headers[5].markdown("**Creuset + residu apres (g)**")
+    else:
+        headers = st.columns([1, 2, 2, 2])
+        headers[0].markdown("**Ech.**")
+        headers[1].markdown("**Creuset vide (g)**")
+        headers[2].markdown("**Creuset + ech. avant (g)**")
+        headers[3].markdown("**Creuset + residu apres (g)**")
 
     m_creuset = []
     m_avant = []
     m_air_opt = []
     m_imm_opt = []
     m_apres = []
+    m_larg_opt = []
+    m_long_opt = []
+    m_ep_opt = []
 
     for i in range(nb_ech5):
-        cols = st.columns([1, 2, 2, 2, 2, 2])
+        if use_dim:
+            cols = st.columns([1, 2, 2, 2, 2, 2, 2])
+        elif use_dp:
+            cols = st.columns([1, 2, 2, 2, 2, 2])
+        else:
+            cols = st.columns([1, 2, 2, 2])
+
         cols[0].markdown(f"**{i+1}**")
         mc = cols[1].number_input(
             f"creuset_{i}", value=30.00, step=0.01, format="%.2f",
@@ -656,24 +698,65 @@ with tab5:
             f"avant_{i}", value=35.00, step=0.01, format="%.2f",
             key=f"calc_ma_{i}", label_visibility="collapsed",
         )
-        m_air = cols[3].number_input(
-            f"air_{i}", value=0.00, step=0.01, format="%.2f",
-            key=f"calc_mair_{i}", label_visibility="collapsed",
-            help="Laisser a 0 si pas de double pesee",
-        )
-        m_imm = cols[4].number_input(
-            f"imm_{i}", value=0.00, step=0.01, format="%.2f",
-            key=f"calc_mimm_{i}", label_visibility="collapsed",
-            help="Masse immergee dans le liquide (0 si non renseignee)",
-        )
-        mp = cols[5].number_input(
-            f"apres_{i}", value=33.00, step=0.01, format="%.2f",
-            key=f"calc_mp_{i}", label_visibility="collapsed",
-        )
+
+        if use_dp:
+            m_air = cols[3].number_input(
+                f"air_{i}", value=0.00, step=0.01, format="%.2f",
+                key=f"calc_mair_{i}", label_visibility="collapsed",
+                help="Laisser a 0 si pas de double pesee",
+            )
+            m_imm = cols[4].number_input(
+                f"imm_{i}", value=0.00, step=0.01, format="%.2f",
+                key=f"calc_mimm_{i}", label_visibility="collapsed",
+                help="Masse immergee dans le liquide",
+            )
+            mp = cols[5].number_input(
+                f"apres_{i}", value=33.00, step=0.01, format="%.2f",
+                key=f"calc_mp_{i}", label_visibility="collapsed",
+            )
+            m_air_opt.append(m_air)
+            m_imm_opt.append(m_imm)
+            m_larg_opt.append(0.0)
+            m_long_opt.append(0.0)
+            m_ep_opt.append(0.0)
+        elif use_dim:
+            mp = cols[3].number_input(
+                f"apres_{i}", value=33.00, step=0.01, format="%.2f",
+                key=f"calc_mp_{i}", label_visibility="collapsed",
+            )
+            larg = cols[4].number_input(
+                f"larg_{i}", value=50.00, step=0.1, format="%.1f",
+                key=f"calc_larg_{i}", label_visibility="collapsed",
+                help="Largeur de l'echantillon en mm",
+            )
+            longu = cols[5].number_input(
+                f"long_{i}", value=50.00, step=0.1, format="%.1f",
+                key=f"calc_long_{i}", label_visibility="collapsed",
+                help="Longueur de l'echantillon en mm",
+            )
+            ep = cols[6].number_input(
+                f"ep_{i}", value=2.00, step=0.01, format="%.2f",
+                key=f"calc_ep_{i}", label_visibility="collapsed",
+                help="Epaisseur de l'echantillon en mm",
+            )
+            m_air_opt.append(0.0)
+            m_imm_opt.append(0.0)
+            m_larg_opt.append(larg)
+            m_long_opt.append(longu)
+            m_ep_opt.append(ep)
+        else:
+            mp = cols[3].number_input(
+                f"apres_{i}", value=33.00, step=0.01, format="%.2f",
+                key=f"calc_mp_{i}", label_visibility="collapsed",
+            )
+            m_air_opt.append(0.0)
+            m_imm_opt.append(0.0)
+            m_larg_opt.append(0.0)
+            m_long_opt.append(0.0)
+            m_ep_opt.append(0.0)
+
         m_creuset.append(mc)
         m_avant.append(ma)
-        m_air_opt.append(m_air)
-        m_imm_opt.append(m_imm)
         m_apres.append(mp)
 
     st.divider()
@@ -702,19 +785,32 @@ with tab5:
             # rho_theo = m/V = m_ech(g) / (vol_f + vol_m)(L) => kg/m3
             rho_theo = m_ech / (vol_f + vol_m) if (vol_f + vol_m) > 0 else 0
 
-        # --- Double pesee : rho_reelle, Vf_reel, Vp ---
+        # --- Methode volumique : rho_reelle, Vf_reel, Vp ---
         double_pesee_ok = (
-            m_air_opt[i] > 0 and m_imm_opt[i] > 0
+            use_dp
+            and m_air_opt[i] > 0 and m_imm_opt[i] > 0
             and (m_air_opt[i] - m_imm_opt[i]) > 0
         )
+        dims_ok = (
+            use_dim
+            and m_larg_opt[i] > 0 and m_long_opt[i] > 0 and m_ep_opt[i] > 0
+            and m_ech > 0
+        )
         rho_reel = vf_reel = vm_reel = vp = 0
+        vol_method_ok = False
         if double_pesee_ok:
             # Archimede : rho = m_air * rho_liq / (m_air - m_imm)
             rho_reel = m_air_opt[i] * rho_liq5 / (m_air_opt[i] - m_imm_opt[i])
-            # Vf_reel = Wf * rho_reel / rho_f
-            vf_reel = wf * rho_reel / rho_f5 if rho_f5 > 0 else 0
+            vol_method_ok = True
+        elif dims_ok:
+            # V_reel (L) = L(mm) * l(mm) * e(mm) * 1e-6  (1 mm3 = 1e-6 L)
+            V_reel_L = m_larg_opt[i] * m_long_opt[i] * m_ep_opt[i] * 1e-6
+            if V_reel_L > 0:
+                rho_reel = m_ech / V_reel_L  # g/L = kg/m3
+                vol_method_ok = True
+        if vol_method_ok and rho_f5 > 0:
+            vf_reel = wf * rho_reel / rho_f5
             vm_reel = wm * rho_reel / rho_m5 if rho_m5 > 0 else 0
-            # Vp = 1 - rho_reel / rho_theo  (= 1 - Vf_reel - Vm_reel)
             vp = 1 - rho_reel / rho_theo if rho_theo > 0 else 0
 
         results_calc.append({
@@ -725,9 +821,9 @@ with tab5:
             "Wm (%)": round(wm * 100, 1),
             "rho_theo (kg/m3)": round(rho_theo, 0) if rho_theo else "",
             "Vf_theo (%)": round(vf_theo * 100, 1) if vf_theo else "",
-            "rho_reel (kg/m3)": round(rho_reel, 0) if double_pesee_ok else "",
-            "Vf_reel (%)": round(vf_reel * 100, 1) if double_pesee_ok else "",
-            "Vp (%)": round(vp * 100, 2) if double_pesee_ok else "",
+            "rho_reel (kg/m3)": round(rho_reel, 0) if vol_method_ok else "",
+            "Vf_reel (%)": round(vf_reel * 100, 1) if vol_method_ok else "",
+            "Vp (%)": round(vp * 100, 2) if vol_method_ok else "",
         })
 
     df_calc = pd.DataFrame(results_calc)
@@ -829,14 +925,20 @@ with tab5:
         st.info("Ajoutez plus d'echantillons pour voir les graphiques statistiques.")
 
     st.divider()
-    df_pesees_brutes = pd.DataFrame({
+    pesees_dict = {
         "Echantillon": list(range(1, nb_ech5 + 1)),
         "Creuset vide (g)": m_creuset,
         "Creuset + ech. avant (g)": m_avant,
-        "Masse air ech. (g)": m_air_opt,
-        "Masse immergee (g)": m_imm_opt,
         "Creuset + residu apres (g)": m_apres,
-    })
+    }
+    if use_dp:
+        pesees_dict["Masse air ech. (g)"] = m_air_opt
+        pesees_dict["Masse immergee (g)"] = m_imm_opt
+    elif use_dim:
+        pesees_dict["Largeur (mm)"] = m_larg_opt
+        pesees_dict["Longueur (mm)"] = m_long_opt
+        pesees_dict["Epaisseur (mm)"] = m_ep_opt
+    df_pesees_brutes = pd.DataFrame(pesees_dict)
     st.download_button(
         "Exporter Excel",
         excel_bytes({

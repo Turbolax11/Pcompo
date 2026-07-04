@@ -634,13 +634,20 @@ with tab5:
 
     rho_liq5 = 1000.0
     use_dims5 = False
-    surf5_mm2 = ep5_mm = 0.0
+    vp_defaut = 0.0
 
     if methode_vp == "Double pesee Archimede":
         rho_liq5 = selectionner_liquide("calc5")
     elif methode_vp == "Dimensions echantillon (surface x epaisseur)":
         use_dims5 = True
         st.caption("Entrer les dimensions de chaque echantillon dans le tableau ci-dessous.")
+    else:
+        vp_defaut = st.number_input(
+            "Hypothese Vp par defaut (%)",
+            min_value=0.0, max_value=20.0, value=3.0, step=0.5, format="%.1f",
+            key="calc_vp_defaut",
+            help="Vf corrige = Vf_theo × (1 − Vp/100). Valeur typique : 3 %.",
+        ) / 100.0
 
     st.divider()
     st.markdown("#### Saisie des pesees")
@@ -762,8 +769,9 @@ with tab5:
     st.divider()
     st.markdown("#### Resultats calcination")
     st.caption(
-        "Vf theo = calcination seule (Vp=0 suppose) | "
-        "Vf reel + Vp = calcination + double pesee Archimede"
+        "Vf_theo = calcination seule (Vp=0) | "
+        "Vf_corr = Vf_theo × (1−Vp_defaut) quand aucune mesure | "
+        "Vf_reel + Vp = calcination + methode volumique"
     )
 
     results_calc = []
@@ -813,6 +821,9 @@ with tab5:
             vm_reel = wm * rho_reel / rho_m5 if rho_m5 > 0 else 0
             vp = 1 - rho_reel / rho_theo if rho_theo > 0 else 0
 
+        # Vf corrige par hypothese Vp par defaut (methode "Aucune" uniquement)
+        vf_corr = vf_theo * (1 - vp_defaut) if (vf_theo and vp_defaut > 0 and not vol_method_ok) else ""
+
         results_calc.append({
             "Ech.": i + 1,
             "Masse ech. (g)": round(m_ech, 3),
@@ -821,6 +832,7 @@ with tab5:
             "Wm (%)": round(wm * 100, 1),
             "rho_theo (kg/m3)": round(rho_theo, 0) if rho_theo else "",
             "Vf_theo (%)": round(vf_theo * 100, 1) if vf_theo else "",
+            f"Vf_corr (Vp={vp_defaut*100:.0f}%)": round(vf_corr * 100, 1) if isinstance(vf_corr, float) else "",
             "rho_reel (kg/m3)": round(rho_reel, 0) if vol_method_ok else "",
             "Vf_reel (%)": round(vf_reel * 100, 1) if vol_method_ok else "",
             "Vp (%)": round(vp * 100, 2) if vol_method_ok else "",
@@ -829,27 +841,25 @@ with tab5:
     df_calc = pd.DataFrame(results_calc)
 
     # Statistiques
-    wf_vals_num  = [r["Wf (%)"] for r in results_calc if isinstance(r["Wf (%)"], float) and r["Wf (%)"] > 0]
-    vft_vals_num = [r["Vf_theo (%)"] for r in results_calc if isinstance(r["Vf_theo (%)"], float) and r["Vf_theo (%)"] > 0]
-    vfr_vals_num = [r["Vf_reel (%)"] for r in results_calc if isinstance(r["Vf_reel (%)"], float) and r["Vf_reel (%)"] > 0]
-    vp_vals_num  = [r["Vp (%)"] for r in results_calc if isinstance(r["Vp (%)"], float)]
+    vf_corr_col = f"Vf_corr (Vp={vp_defaut*100:.0f}%)"
+    wf_vals_num   = [r["Wf (%)"] for r in results_calc if isinstance(r["Wf (%)"], float) and r["Wf (%)"] > 0]
+    vft_vals_num  = [r["Vf_theo (%)"] for r in results_calc if isinstance(r["Vf_theo (%)"], float) and r["Vf_theo (%)"] > 0]
+    vfc_vals_num  = [r[vf_corr_col] for r in results_calc if isinstance(r.get(vf_corr_col), float) and r[vf_corr_col] > 0]
+    vfr_vals_num  = [r["Vf_reel (%)"] for r in results_calc if isinstance(r["Vf_reel (%)"], float) and r["Vf_reel (%)"] > 0]
+    vp_vals_num   = [r["Vp (%)"] for r in results_calc if isinstance(r["Vp (%)"], float)]
 
     def stat_row(label, vals):
+        fn = np.mean if label == "Moyenne" else np.std
         return {k: "" for k in results_calc[0].keys()} | {
             "Ech.": label,
-            "Wf (%)": round(np.mean(vals["wf"]), 1) if vals.get("wf") else "",
-            "Vf_theo (%)": round(np.mean(vals["vft"]), 1) if vals.get("vft") else "",
-            "Vf_reel (%)": round(np.mean(vals["vfr"]), 1) if vals.get("vfr") else "",
-            "Vp (%)": round(np.mean(vals["vp"]), 2) if vals.get("vp") else "",
-        } if label == "Moyenne" else {k: "" for k in results_calc[0].keys()} | {
-            "Ech.": label,
-            "Wf (%)": round(np.std(vals["wf"]), 1) if vals.get("wf") else "",
-            "Vf_theo (%)": round(np.std(vals["vft"]), 1) if vals.get("vft") else "",
-            "Vf_reel (%)": round(np.std(vals["vfr"]), 1) if vals.get("vfr") else "",
-            "Vp (%)": round(np.std(vals["vp"]), 2) if vals.get("vp") else "",
+            "Wf (%)": round(fn(vals["wf"]), 1) if vals.get("wf") else "",
+            "Vf_theo (%)": round(fn(vals["vft"]), 1) if vals.get("vft") else "",
+            vf_corr_col: round(fn(vals["vfc"]), 1) if vals.get("vfc") else "",
+            "Vf_reel (%)": round(fn(vals["vfr"]), 1) if vals.get("vfr") else "",
+            "Vp (%)": round(fn(vals["vp"]), 2) if vals.get("vp") else "",
         }
 
-    vals_dict = {"wf": wf_vals_num, "vft": vft_vals_num, "vfr": vfr_vals_num, "vp": vp_vals_num}
+    vals_dict = {"wf": wf_vals_num, "vft": vft_vals_num, "vfc": vfc_vals_num, "vfr": vfr_vals_num, "vp": vp_vals_num}
     if wf_vals_num:
         df_display = pd.concat([
             df_calc,
@@ -866,6 +876,8 @@ with tab5:
         cols_m[0].metric("Wf moyen", f"{np.mean(wf_vals_num):.1f} %")
         if vft_vals_num:
             cols_m[1].metric("Vf_theo moyen (Vp=0)", f"{np.mean(vft_vals_num):.1f} %")
+        if vfc_vals_num:
+            cols_m[2].metric(f"Vf_corr moyen (Vp={vp_defaut*100:.0f}%)", f"{np.mean(vfc_vals_num):.1f} %")
         if vfr_vals_num:
             cols_m[2].metric("Vf_reel moyen", f"{np.mean(vfr_vals_num):.1f} %")
         if vp_vals_num:
@@ -876,11 +888,11 @@ with tab5:
     x_ech = list(range(1, nb_ech5 + 1))
 
     if wf_vals_num and len(wf_vals_num) > 1:
-        has_dp = bool(vfr_vals_num)
-        ncols = 4 if has_dp else 2
+        has_vol = bool(vfr_vals_num)
+        has_corr = bool(vfc_vals_num)
+        ncols = 4 if has_vol else (3 if has_corr else 2)
         fig5, axes5 = plt.subplots(1, ncols, figsize=(5 * ncols, 4))
-        if ncols == 2:
-            axes5 = list(axes5)
+        axes5 = list(axes5) if ncols > 1 else [axes5]
 
         # Wf
         axes5[0].bar(x_ech[:len(wf_vals_num)], wf_vals_num, color="#4CAF50", alpha=0.7)
@@ -890,16 +902,33 @@ with tab5:
         axes5[0].set_xlabel("Echantillon"); axes5[0].set_ylabel("Wf (%)")
         axes5[0].legend(); axes5[0].grid(True, alpha=0.3, axis="y")
 
-        # Vf_theo
+        # Vf_theo (+ Vf_corr superpose si methode "Aucune")
         if vft_vals_num:
-            axes5[1].bar(x_ech[:len(vft_vals_num)], vft_vals_num, color="#6C63FF", alpha=0.7)
-            axes5[1].axhline(np.mean(vft_vals_num), color="#FF6B6B", linestyle="--",
-                             label=f"Moy = {np.mean(vft_vals_num):.1f}%")
-            axes5[1].set_title("Vf theo (Vp=0)")
+            xn1 = np.arange(1, len(vft_vals_num) + 1)
+            if has_corr and len(vfc_vals_num) == len(vft_vals_num):
+                w = 0.35
+                axes5[1].bar(xn1 - w/2, vft_vals_num, w, label="Vf_theo (Vp=0)", color="#6C63FF", alpha=0.7)
+                axes5[1].bar(xn1 + w/2, vfc_vals_num, w,
+                             label=f"Vf_corr (Vp={vp_defaut*100:.0f}%)", color="#26C6DA", alpha=0.7)
+                axes5[1].set_title(f"Vf_theo vs Vf_corr (Vp={vp_defaut*100:.0f}%)")
+            else:
+                axes5[1].bar(xn1, vft_vals_num, color="#6C63FF", alpha=0.7)
+                axes5[1].axhline(np.mean(vft_vals_num), color="#FF6B6B", linestyle="--",
+                                 label=f"Moy = {np.mean(vft_vals_num):.1f}%")
+                axes5[1].set_title("Vf theo (Vp=0)")
             axes5[1].set_xlabel("Echantillon"); axes5[1].set_ylabel("Vf (%)")
             axes5[1].legend(); axes5[1].grid(True, alpha=0.3, axis="y")
 
-        if has_dp:
+        if has_corr and not has_vol:
+            # Graphique dedié Vf_corr quand methode "Aucune"
+            axes5[2].bar(x_ech[:len(vfc_vals_num)], vfc_vals_num, color="#26C6DA", alpha=0.8)
+            axes5[2].axhline(np.mean(vfc_vals_num), color="#FF6B6B", linestyle="--",
+                             label=f"Moy = {np.mean(vfc_vals_num):.1f}%")
+            axes5[2].set_title(f"Vf corrige (Vp={vp_defaut*100:.0f}% suppose)")
+            axes5[2].set_xlabel("Echantillon"); axes5[2].set_ylabel("Vf (%)")
+            axes5[2].legend(); axes5[2].grid(True, alpha=0.3, axis="y")
+
+        if has_vol:
             # Vf_reel vs Vf_theo
             n = min(len(vft_vals_num), len(vfr_vals_num))
             xn = np.arange(1, n + 1)

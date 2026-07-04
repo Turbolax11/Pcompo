@@ -678,148 +678,154 @@ with tab5:
 
     st.divider()
     st.markdown("#### Resultats calcination")
+    st.caption(
+        "Vf theo = calcination seule (Vp=0 suppose) | "
+        "Vf reel + Vp = calcination + double pesee Archimede"
+    )
 
     results_calc = []
     for i in range(nb_ech5):
         m_ech = m_avant[i] - m_creuset[i]
         m_fibre = m_apres[i] - m_creuset[i]
-        m_resine_perdue = m_ech - m_fibre
+        m_resine = m_ech - m_fibre
 
-        if m_ech > 0:
-            wf = m_fibre / m_ech * 100
-            wm = m_resine_perdue / m_ech * 100
-        else:
-            wf = 0
-            wm = 0
+        wf = m_fibre / m_ech if m_ech > 0 else 0
+        wm = m_resine / m_ech if m_ech > 0 else 0
 
-        vf = 0
-        rho_c_calc = 0
-        vp = 0
-        double_pesee_ok = m_air_opt[i] > 0 and m_imm_opt[i] > 0 and (m_air_opt[i] - m_imm_opt[i]) > 0
-        if m_ech > 0 and rho_f5 > 0 and rho_m5 > 0:
+        # --- Calcination seule : Vf_theo et rho_theo (Vp = 0 suppose) ---
+        vf_theo = rho_theo = 0
+        if m_ech > 0 and rho_f5 > 0 and rho_m5 > 0 and m_fibre > 0:
+            # vol en g/(kg/m3) = L => ratio dimensionless
             vol_f = m_fibre / rho_f5
-            vol_m = m_resine_perdue / rho_m5
-            vol_total_theo = vol_f + vol_m
+            vol_m = m_resine / rho_m5
+            vf_theo = vol_f / (vol_f + vol_m) if (vol_f + vol_m) > 0 else 0
+            # rho_theo = m/V = m_ech(g) / (vol_f + vol_m)(L) => kg/m3
+            rho_theo = m_ech / (vol_f + vol_m) if (vol_f + vol_m) > 0 else 0
 
-            if double_pesee_ok:
-                # Archimede : rho = m_air * rho_liq / (m_air - m_imm)
-                delta_imm = m_air_opt[i] - m_imm_opt[i]
-                rho_c_calc = m_air_opt[i] * rho_liq5 / delta_imm
-                vol_total_reel = m_ech / rho_c_calc if rho_c_calc > 0 else vol_total_theo
-            else:
-                vol_total_reel = vol_total_theo
-                rho_c_calc = m_ech / vol_total_theo * 1000 if vol_total_theo > 0 else 0
-
-            vf = vol_f / vol_total_reel * 100 if vol_total_reel > 0 else 0
-            vm = vol_m / vol_total_reel * 100 if vol_total_reel > 0 else 0
-            vp = 100 - vf - vm if double_pesee_ok else 0
+        # --- Double pesee : rho_reelle, Vf_reel, Vp ---
+        double_pesee_ok = (
+            m_air_opt[i] > 0 and m_imm_opt[i] > 0
+            and (m_air_opt[i] - m_imm_opt[i]) > 0
+        )
+        rho_reel = vf_reel = vm_reel = vp = 0
+        if double_pesee_ok:
+            # Archimede : rho = m_air * rho_liq / (m_air - m_imm)
+            rho_reel = m_air_opt[i] * rho_liq5 / (m_air_opt[i] - m_imm_opt[i])
+            # Vf_reel = Wf * rho_reel / rho_f
+            vf_reel = wf * rho_reel / rho_f5 if rho_f5 > 0 else 0
+            vm_reel = wm * rho_reel / rho_m5 if rho_m5 > 0 else 0
+            # Vp = 1 - rho_reel / rho_theo  (= 1 - Vf_reel - Vm_reel)
+            vp = 1 - rho_reel / rho_theo if rho_theo > 0 else 0
 
         results_calc.append({
-            "Echantillon": i + 1,
+            "Ech.": i + 1,
             "Masse ech. (g)": round(m_ech, 3),
             "Masse fibre (g)": round(m_fibre, 3),
-            "Wf (%)": round(wf, 1),
-            "Wm (%)": round(wm, 1),
-            "Vf (%)": round(vf, 1),
-            "Densite (kg/m3)": round(rho_c_calc, 0),
+            "Wf (%)": round(wf * 100, 1),
+            "Wm (%)": round(wm * 100, 1),
+            "rho_theo (kg/m3)": round(rho_theo, 0) if rho_theo else "",
+            "Vf_theo (%)": round(vf_theo * 100, 1) if vf_theo else "",
+            "rho_reel (kg/m3)": round(rho_reel, 0) if double_pesee_ok else "",
+            "Vf_reel (%)": round(vf_reel * 100, 1) if double_pesee_ok else "",
+            "Vp (%)": round(vp * 100, 2) if double_pesee_ok else "",
         })
 
     df_calc = pd.DataFrame(results_calc)
 
-    vf_values = [r["Vf (%)"] for r in results_calc if r["Vf (%)"] > 0]
-    wf_values = [r["Wf (%)"] for r in results_calc if r["Wf (%)"] > 0]
+    # Statistiques
+    wf_vals_num  = [r["Wf (%)"] for r in results_calc if isinstance(r["Wf (%)"], float) and r["Wf (%)"] > 0]
+    vft_vals_num = [r["Vf_theo (%)"] for r in results_calc if isinstance(r["Vf_theo (%)"], float) and r["Vf_theo (%)"] > 0]
+    vfr_vals_num = [r["Vf_reel (%)"] for r in results_calc if isinstance(r["Vf_reel (%)"], float) and r["Vf_reel (%)"] > 0]
+    vp_vals_num  = [r["Vp (%)"] for r in results_calc if isinstance(r["Vp (%)"], float)]
 
-    if vf_values:
-        moy_vf = np.mean(vf_values)
-        std_vf = np.std(vf_values)
-        moy_wf = np.mean(wf_values)
-        std_wf = np.std(wf_values)
+    def stat_row(label, vals):
+        return {k: "" for k in results_calc[0].keys()} | {
+            "Ech.": label,
+            "Wf (%)": round(np.mean(vals["wf"]), 1) if vals.get("wf") else "",
+            "Vf_theo (%)": round(np.mean(vals["vft"]), 1) if vals.get("vft") else "",
+            "Vf_reel (%)": round(np.mean(vals["vfr"]), 1) if vals.get("vfr") else "",
+            "Vp (%)": round(np.mean(vals["vp"]), 2) if vals.get("vp") else "",
+        } if label == "Moyenne" else {k: "" for k in results_calc[0].keys()} | {
+            "Ech.": label,
+            "Wf (%)": round(np.std(vals["wf"]), 1) if vals.get("wf") else "",
+            "Vf_theo (%)": round(np.std(vals["vft"]), 1) if vals.get("vft") else "",
+            "Vf_reel (%)": round(np.std(vals["vfr"]), 1) if vals.get("vfr") else "",
+            "Vp (%)": round(np.std(vals["vp"]), 2) if vals.get("vp") else "",
+        }
 
-        summary = pd.DataFrame([{
-            "Echantillon": "Moyenne",
-            "Masse ech. (g)": "",
-            "Masse fibre (g)": "",
-            "Wf (%)": round(moy_wf, 1),
-            "Wm (%)": round(100 - moy_wf, 1),
-            "Vf (%)": round(moy_vf, 1),
-            "Densite (kg/m3)": "",
-        }, {
-            "Echantillon": "Ecart-type",
-            "Masse ech. (g)": "",
-            "Masse fibre (g)": "",
-            "Wf (%)": round(std_wf, 1),
-            "Wm (%)": "",
-            "Vf (%)": round(std_vf, 1),
-            "Densite (kg/m3)": "",
-        }])
-        df_display = pd.concat([df_calc, summary], ignore_index=True)
+    vals_dict = {"wf": wf_vals_num, "vft": vft_vals_num, "vfr": vfr_vals_num, "vp": vp_vals_num}
+    if wf_vals_num:
+        df_display = pd.concat([
+            df_calc,
+            pd.DataFrame([stat_row("Moyenne", vals_dict), stat_row("Ecart-type", vals_dict)])
+        ], ignore_index=True)
     else:
         df_display = df_calc
 
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
+    # Metriques recap
+    if wf_vals_num:
+        cols_m = st.columns(4)
+        cols_m[0].metric("Wf moyen", f"{np.mean(wf_vals_num):.1f} %")
+        if vft_vals_num:
+            cols_m[1].metric("Vf_theo moyen (Vp=0)", f"{np.mean(vft_vals_num):.1f} %")
+        if vfr_vals_num:
+            cols_m[2].metric("Vf_reel moyen", f"{np.mean(vfr_vals_num):.1f} %")
+        if vp_vals_num:
+            cols_m[3].metric("Porosite moyenne", f"{np.mean(vp_vals_num):.2f} %")
+
     st.divider()
     st.markdown("#### Graphiques")
+    x_ech = list(range(1, nb_ech5 + 1))
 
-    if vf_values and len(vf_values) > 1:
-        fig5, axes5 = plt.subplots(1, 3, figsize=(16, 5))
+    if wf_vals_num and len(wf_vals_num) > 1:
+        has_dp = bool(vfr_vals_num)
+        ncols = 4 if has_dp else 2
+        fig5, axes5 = plt.subplots(1, ncols, figsize=(5 * ncols, 4))
+        if ncols == 2:
+            axes5 = list(axes5)
 
-        # Vf par echantillon
-        x5 = range(1, len(vf_values) + 1)
-        axes5[0].bar(x5, vf_values, color="#6C63FF", alpha=0.7)
-        axes5[0].axhline(y=moy_vf, color="#FF6B6B", linestyle="--", label=f"Moy = {moy_vf:.1f}%")
-        axes5[0].fill_between(
-            [0.5, len(vf_values) + 0.5],
-            moy_vf - std_vf, moy_vf + std_vf,
-            alpha=0.15, color="#FF6B6B",
-        )
-        axes5[0].set_xlabel("Echantillon")
-        axes5[0].set_ylabel("Vf (%)")
-        axes5[0].set_title("Taux volumique de fibres")
-        axes5[0].set_xticks(list(x5))
-        axes5[0].legend()
-        axes5[0].grid(True, alpha=0.3, axis="y")
+        # Wf
+        axes5[0].bar(x_ech[:len(wf_vals_num)], wf_vals_num, color="#4CAF50", alpha=0.7)
+        axes5[0].axhline(np.mean(wf_vals_num), color="#FF6B6B", linestyle="--",
+                         label=f"Moy = {np.mean(wf_vals_num):.1f}%")
+        axes5[0].set_title("Taux massique Wf")
+        axes5[0].set_xlabel("Echantillon"); axes5[0].set_ylabel("Wf (%)")
+        axes5[0].legend(); axes5[0].grid(True, alpha=0.3, axis="y")
 
-        # Wf par echantillon
-        axes5[1].bar(x5, wf_values, color="#4CAF50", alpha=0.7)
-        axes5[1].axhline(y=moy_wf, color="#FF6B6B", linestyle="--", label=f"Moy = {moy_wf:.1f}%")
-        axes5[1].set_xlabel("Echantillon")
-        axes5[1].set_ylabel("Wf (%)")
-        axes5[1].set_title("Taux massique de fibres")
-        axes5[1].set_xticks(list(x5))
-        axes5[1].legend()
-        axes5[1].grid(True, alpha=0.3, axis="y")
+        # Vf_theo
+        if vft_vals_num:
+            axes5[1].bar(x_ech[:len(vft_vals_num)], vft_vals_num, color="#6C63FF", alpha=0.7)
+            axes5[1].axhline(np.mean(vft_vals_num), color="#FF6B6B", linestyle="--",
+                             label=f"Moy = {np.mean(vft_vals_num):.1f}%")
+            axes5[1].set_title("Vf theo (Vp=0)")
+            axes5[1].set_xlabel("Echantillon"); axes5[1].set_ylabel("Vf (%)")
+            axes5[1].legend(); axes5[1].grid(True, alpha=0.3, axis="y")
 
-        # Masses fibre vs resine
-        m_fibres_list = [r["Masse fibre (g)"] for r in results_calc if r["Masse ech. (g)"] > 0]
-        m_resine_list = [r["Masse ech. (g)"] - r["Masse fibre (g)"] for r in results_calc if r["Masse ech. (g)"] > 0]
-        x5b = np.arange(1, len(m_fibres_list) + 1)
-        width = 0.35
-        axes5[2].bar(x5b - width / 2, m_fibres_list, width, label="Fibres", color="#6C63FF", alpha=0.7)
-        axes5[2].bar(x5b + width / 2, m_resine_list, width, label="Resine", color="#FF6B6B", alpha=0.7)
-        axes5[2].set_xlabel("Echantillon")
-        axes5[2].set_ylabel("Masse (g)")
-        axes5[2].set_title("Masse fibre vs resine")
-        axes5[2].set_xticks(list(x5b))
-        axes5[2].legend()
-        axes5[2].grid(True, alpha=0.3, axis="y")
+        if has_dp:
+            # Vf_reel vs Vf_theo
+            n = min(len(vft_vals_num), len(vfr_vals_num))
+            xn = np.arange(1, n + 1)
+            w = 0.35
+            axes5[2].bar(xn - w/2, vft_vals_num[:n], w, label="Vf_theo", color="#6C63FF", alpha=0.7)
+            axes5[2].bar(xn + w/2, vfr_vals_num[:n], w, label="Vf_reel", color="#FF6B6B", alpha=0.7)
+            axes5[2].set_title("Vf theo vs reel")
+            axes5[2].set_xlabel("Echantillon"); axes5[2].set_ylabel("Vf (%)")
+            axes5[2].legend(); axes5[2].grid(True, alpha=0.3, axis="y")
+
+            # Porosite
+            axes5[3].bar(x_ech[:len(vp_vals_num)], vp_vals_num, color="#FFA726", alpha=0.8)
+            axes5[3].axhline(np.mean(vp_vals_num), color="#FF6B6B", linestyle="--",
+                             label=f"Moy = {np.mean(vp_vals_num):.2f}%")
+            axes5[3].set_title("Porosite Vp")
+            axes5[3].set_xlabel("Echantillon"); axes5[3].set_ylabel("Vp (%)")
+            axes5[3].legend(); axes5[3].grid(True, alpha=0.3, axis="y")
 
         plt.tight_layout()
         st.pyplot(fig5)
 
-        # Distribution / histogramme
-        if len(vf_values) >= 3:
-            fig_hist, ax_hist = plt.subplots(figsize=(8, 4))
-            ax_hist.hist(vf_values, bins=max(3, len(vf_values) // 2), color="#6C63FF", alpha=0.7, edgecolor="white")
-            ax_hist.axvline(x=moy_vf, color="#FF6B6B", linestyle="--", linewidth=2, label=f"Moyenne = {moy_vf:.1f}%")
-            ax_hist.set_xlabel("Vf (%)")
-            ax_hist.set_ylabel("Frequence")
-            ax_hist.set_title("Distribution du taux volumique de fibres")
-            ax_hist.legend()
-            ax_hist.grid(True, alpha=0.3, axis="y")
-            st.pyplot(fig_hist)
-
-    elif vf_values:
+    elif wf_vals_num:
         st.info("Ajoutez plus d'echantillons pour voir les graphiques statistiques.")
 
     st.divider()
@@ -833,7 +839,10 @@ with tab5:
     })
     st.download_button(
         "Exporter Excel",
-        excel_bytes({"Resultats calcination": df_display, "Pesees brutes": df_pesees_brutes}),
+        excel_bytes({
+            "Resultats calcination": df_display,
+            "Pesees brutes": df_pesees_brutes,
+        }),
         "calcination.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key="dl_tab5",
     )

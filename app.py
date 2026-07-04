@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import io
 
 st.set_page_config(page_title="Calculs Composites - Atelier", layout="wide")
 
@@ -62,6 +63,14 @@ def selectionner_liquide(prefix):
                 key=f"{prefix}_rho_perso",
             )
     return rho
+
+def excel_bytes(sheets):
+    """Convertit un dict {nom_feuille: DataFrame} en bytes xlsx telechargeable."""
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        for name, df in sheets.items():
+            df.to_excel(writer, sheet_name=name[:31], index=False)
+    return buf.getvalue()
 
 RESINES = {
     "Epoxy standard": {"densite": 1200, "ratio_durcisseur": 30},
@@ -152,6 +161,20 @@ with tab1:
         ax.grid(True, alpha=0.3)
         st.pyplot(fig)
 
+        df_res_vf1 = pd.DataFrame([{
+            "Fibre": fibre_type, "Densite fibre (kg/m3)": rho_f,
+            "Resine": resine_type, "Densite matrice (kg/m3)": rho_m,
+            "Masse fibre (g)": m_f, "Masse resine (g)": m_r,
+            "Vf (%)": round(v_f * 100, 2), "Wf (%)": round(w_f * 100, 2),
+            "Densite composite (kg/m3)": round(rho_c, 1),
+        }])
+        df_sens_vf1 = pd.DataFrame({"Ratio mf/mr": ratios, "Vf (%)": [v * 100 for v in vf_vals]})
+        st.download_button(
+            "Exporter Excel", excel_bytes({"Resultats": df_res_vf1, "Sensibilite": df_sens_vf1}),
+            "taux_fibre.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab1_m1",
+        )
+
     elif methode_vf == "A partir de la fraction massique et densite composite":
         col1, col2 = st.columns(2)
         with col1:
@@ -170,6 +193,19 @@ with tab1:
 
         if v_p < 0:
             st.warning("Porosite negative : verifiez la coherence des donnees (densite composite trop elevee).")
+
+        df_res_vf2 = pd.DataFrame([{
+            "Fibre": fibre_type, "Densite fibre (kg/m3)": rho_f,
+            "Resine": resine_type, "Densite matrice (kg/m3)": rho_m,
+            "Wf (%)": w_f_input, "Densite composite mesuree (kg/m3)": rho_c_input,
+            "Vf (%)": round(v_f * 100, 2), "Vm (%)": round(v_m * 100, 2),
+            "Vp - Porosite (%)": round(v_p * 100, 2),
+        }])
+        st.download_button(
+            "Exporter Excel", excel_bytes({"Resultats": df_res_vf2}),
+            "taux_fibre.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab1_m2",
+        )
 
     else:
         col1, col2, col3 = st.columns(3)
@@ -191,6 +227,18 @@ with tab1:
 
         if v_f > 0.75:
             st.warning("Vf > 75% : valeur anormalement elevee, verifiez les donnees.")
+
+        df_res_vf3 = pd.DataFrame([{
+            "Fibre": fibre_type, "Densite fibre (kg/m3)": rho_f,
+            "Grammage (g/m2)": grammage, "Nombre de plis": nb_plis,
+            "Epaisseur mesuree (mm)": ep_mesuree,
+            "Vf (%)": round(v_f * 100, 2), "Epaisseur par pli (mm)": round(ep_par_pli, 4),
+        }])
+        st.download_button(
+            "Exporter Excel", excel_bytes({"Resultats": df_res_vf3}),
+            "taux_fibre.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab1_m3",
+        )
 
 
 # =============================================================================
@@ -258,6 +306,22 @@ with tab2:
     ax2.legend()
     ax2.grid(True, alpha=0.3)
     st.pyplot(fig2)
+
+    df_res_ent = pd.DataFrame([{
+        "Fibre": fibre_type2, "Densite fibre (kg/m3)": rho_f2,
+        "Grammage (g/m2)": grammage2, "Nombre de plis": nb_plis2,
+        "Vf cible (%)": round(vf_cible * 100, 1),
+        "Entrefer (mm)": round(entrefer, 3),
+        "Epaisseur par pli (mm)": round(ep_par_pli2, 4),
+        "Masse surfacique fibres (g/m2)": round(masse_surf * 1000, 1),
+    }])
+    df_courbe_ent = pd.DataFrame({"Vf (%)": vf_plot * 100, "Entrefer (mm)": entrefer_plot})
+    st.download_button(
+        "Exporter Excel",
+        excel_bytes({"Resultats": df_res_ent, "Tableau Vf-Plis": df_entrefer.reset_index(), "Courbe": df_courbe_ent}),
+        "entrefer.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="dl_tab2",
+    )
 
 
 # =============================================================================
@@ -361,6 +425,20 @@ with tab3:
         ax3.set_title("Repartition resine / durcisseur")
         st.pyplot(fig3)
 
+    df_prep = pd.DataFrame([{
+        "Systeme resine": resine_type3, "Densite (kg/m3)": rho_resine,
+        "Ratio durcisseur (PHR)": ratio_phr, "Marge pertes (%)": perte_pct,
+        "Masse resine (g)": round(masse_resine_pure, 2),
+        "Masse durcisseur (g)": round(masse_durcisseur, 2),
+        "Masse totale avec pertes (g)": round(masse_avec_perte, 2),
+        "Masse pertes (g)": round(masse_avec_perte - masse_totale, 2),
+    }])
+    st.download_button(
+        "Exporter Excel", excel_bytes({"Preparation resine": df_prep}),
+        "preparation_resine.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="dl_tab3",
+    )
+
 
 # =============================================================================
 # TAB 4 : Masse et densite composite
@@ -420,6 +498,23 @@ with tab4:
         ax4.legend()
         ax4.grid(True, alpha=0.3)
         st.pyplot(fig4)
+
+        df_res_dens = pd.DataFrame([{
+            "Fibre": fibre_type4, "Densite fibre (kg/m3)": rho_f4,
+            "Resine": resine_type4, "Densite matrice (kg/m3)": rho_m4,
+            "Vf (%)": round(vf4 * 100, 1),
+            "Densite composite (kg/m3)": round(rho_c4, 1),
+            "Surface (m2)": surf4, "Epaisseur (mm)": ep4,
+            "Volume (cm3)": round(vol4 * 1e6, 2),
+            "Masse composite (g)": round(masse4, 1),
+        }])
+        df_courbe_dens = pd.DataFrame({"Vf (%)": vf_range4 * 100, "Densite composite (kg/m3)": rho_c_range})
+        st.download_button(
+            "Exporter Excel",
+            excel_bytes({"Resultats": df_res_dens, "Courbe densite-Vf": df_courbe_dens}),
+            "densite_composite.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab4_m1",
+        )
 
     else:
         st.markdown(
@@ -512,6 +607,12 @@ with tab4:
             ax_arch.legend()
             ax_arch.grid(True, alpha=0.3, axis="y")
             st.pyplot(fig_arch)
+
+        st.download_button(
+            "Exporter Excel", excel_bytes({"Pesees Archimede": df_arch}),
+            "double_pesee.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab4_m2",
+        )
 
 
 # =============================================================================
@@ -732,6 +833,22 @@ with tab5:
     elif vf_values:
         st.info("Ajoutez plus d'echantillons pour voir les graphiques statistiques.")
 
+    st.divider()
+    df_pesees_brutes = pd.DataFrame({
+        "Echantillon": list(range(1, nb_ech5 + 1)),
+        "Creuset vide (g)": m_creuset,
+        "Creuset + ech. avant (g)": m_avant,
+        "Masse air ech. (g)": m_air_opt,
+        "Masse immergee (g)": m_imm_opt,
+        "Creuset + residu apres (g)": m_apres,
+    })
+    st.download_button(
+        "Exporter Excel",
+        excel_bytes({"Resultats calcination": df_display, "Pesees brutes": df_pesees_brutes}),
+        "calcination.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="dl_tab5",
+    )
+
 
 # =============================================================================
 # TAB 6 : Epaisseur composite (reprise du code existant ameliore)
@@ -803,6 +920,22 @@ with tab6:
         ax6.grid(True, alpha=0.3)
         st.pyplot(fig6)
 
+        df_res_ep1 = pd.DataFrame([{
+            "Fibre": fibre_type6, "Densite fibre (kg/m3)": rho_f6,
+            "Densite matrice (kg/m3)": rho_m6,
+            "Largeur (mm)": largeur, "Longueur (mm)": longueur,
+            "Masse fibres (g)": m_f6, "Vf (%)": round(V_f6 * 100, 1),
+            "Epaisseur calculee (mm)": round(epaisseur6, 3),
+            "Masse resine (g)": round(masse_resine6, 2),
+        }])
+        df_courbe_ep1 = pd.DataFrame({"Vf (%)": V_f_values * 100, "Epaisseur (mm)": ep_values})
+        st.download_button(
+            "Exporter Excel",
+            excel_bytes({"Resultats": df_res_ep1, "Courbe Vf": df_courbe_ep1}),
+            "epaisseur.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab6_m1",
+        )
+
     else:
         col1, col2 = st.columns(2)
         with col1:
@@ -828,3 +961,17 @@ with tab6:
         ax6b.legend()
         ax6b.grid(True, alpha=0.3)
         st.pyplot(fig6b)
+
+        df_res_ep2 = pd.DataFrame([{
+            "Fibre": fibre_type6b, "Densite fibre (kg/m3)": rho_f6b,
+            "Grammage (g/m2)": grammage6, "Nombre de plis": nb_plis6,
+            "Vf (%)": round(V_f6b * 100, 1),
+            "Epaisseur calculee (mm)": round(epaisseur6b, 3),
+        }])
+        df_courbe_ep2 = pd.DataFrame({"Nombre de plis": list(nb_plis_values), "Epaisseur (mm)": ep_values_b})
+        st.download_button(
+            "Exporter Excel",
+            excel_bytes({"Resultats": df_res_ep2, "Courbe plis": df_courbe_ep2}),
+            "epaisseur.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_tab6_m2",
+        )

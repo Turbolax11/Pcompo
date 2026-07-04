@@ -64,6 +64,13 @@ def selectionner_liquide(prefix):
             )
     return rho
 
+def sync_select(select_key, field_key, new_value):
+    """Met a jour session_state[field_key] quand la valeur du selectbox change."""
+    marker = f"_sync_{select_key}_to_{field_key}"
+    if st.session_state.get(marker) != st.session_state.get(select_key):
+        st.session_state[field_key] = new_value
+        st.session_state[marker] = st.session_state.get(select_key)
+
 def excel_bytes(sheets):
     """Convertit un dict {nom_feuille: DataFrame} en bytes xlsx telechargeable."""
     buf = io.BytesIO()
@@ -111,22 +118,12 @@ with tab1:
     col_mat, col_res = st.columns(2)
     with col_mat:
         fibre_type = st.selectbox("Type de fibre", list(MATERIAUX_FIBRES.keys()), key="vf_fibre")
-        rho_f = st.number_input(
-            "Densite fibre (kg/m3)",
-            value=MATERIAUX_FIBRES[fibre_type],
-            min_value=500,
-            max_value=5000,
-            key="vf_rho_f",
-        )
+        sync_select("vf_fibre", "vf_rho_f", MATERIAUX_FIBRES[fibre_type])
+        rho_f = st.number_input("Densite fibre (kg/m3)", min_value=500, max_value=5000, key="vf_rho_f")
     with col_res:
         resine_type = st.selectbox("Type de resine", list(RESINES.keys()), key="vf_resine")
-        rho_m = st.number_input(
-            "Densite matrice (kg/m3)",
-            value=RESINES[resine_type]["densite"],
-            min_value=500,
-            max_value=3000,
-            key="vf_rho_m",
-        )
+        sync_select("vf_resine", "vf_rho_m", RESINES[resine_type]["densite"])
+        rho_m = st.number_input("Densite matrice (kg/m3)", min_value=500, max_value=3000, key="vf_rho_m")
 
     st.divider()
 
@@ -254,13 +251,8 @@ with tab2:
     col_mat2, col_param2 = st.columns(2)
     with col_mat2:
         fibre_type2 = st.selectbox("Type de fibre", list(MATERIAUX_FIBRES.keys()), key="ent_fibre")
-        rho_f2 = st.number_input(
-            "Densite fibre (kg/m3)",
-            value=MATERIAUX_FIBRES[fibre_type2],
-            min_value=500,
-            max_value=5000,
-            key="ent_rho_f",
-        )
+        sync_select("ent_fibre", "ent_rho_f", MATERIAUX_FIBRES[fibre_type2])
+        rho_f2 = st.number_input("Densite fibre (kg/m3)", min_value=500, max_value=5000, key="ent_rho_f")
     with col_param2:
         vf_cible = st.slider("Vf cible (%)", 30.0, 70.0, 60.0, step=0.5, key="ent_vf") / 100
         grammage2 = st.number_input("Grammage fibre (g/m2)", value=300, min_value=50, max_value=3000, key="ent_gram")
@@ -334,21 +326,14 @@ with tab3:
     col_r1, col_r2 = st.columns(2)
     with col_r1:
         resine_type3 = st.selectbox("Systeme resine", list(RESINES.keys()), key="prep_resine")
-        rho_resine = st.number_input(
-            "Densite resine melangee (kg/m3)",
-            value=RESINES[resine_type3]["densite"],
-            min_value=500,
-            max_value=2000,
-            key="prep_rho",
-        )
+        sync_select("prep_resine", "prep_rho", RESINES[resine_type3]["densite"])
+        rho_resine = st.number_input("Densite resine melangee (kg/m3)", min_value=500, max_value=2000, key="prep_rho")
 
     with col_r2:
+        sync_select("prep_resine", "prep_ratio", RESINES[resine_type3]["ratio_durcisseur"])
         ratio_phr = st.number_input(
             "Ratio durcisseur (PHR = parts pour 100 parts resine)",
-            value=RESINES[resine_type3]["ratio_durcisseur"],
-            min_value=0,
-            max_value=200,
-            key="prep_ratio",
+            min_value=0, max_value=200, key="prep_ratio",
         )
         perte_pct = st.number_input(
             "Marge / pertes (%)",
@@ -460,10 +445,12 @@ with tab4:
         col_t1, col_t2 = st.columns(2)
         with col_t1:
             fibre_type4 = st.selectbox("Type de fibre", list(MATERIAUX_FIBRES.keys()), key="dens_fibre")
-            rho_f4 = st.number_input("Densite fibre (kg/m3)", value=MATERIAUX_FIBRES[fibre_type4], key="dens_rho_f")
+            sync_select("dens_fibre", "dens_rho_f", MATERIAUX_FIBRES[fibre_type4])
+            rho_f4 = st.number_input("Densite fibre (kg/m3)", min_value=500, max_value=5000, key="dens_rho_f")
         with col_t2:
             resine_type4 = st.selectbox("Type de resine", list(RESINES.keys()), key="dens_resine")
-            rho_m4 = st.number_input("Densite matrice (kg/m3)", value=RESINES[resine_type4]["densite"], key="dens_rho_m")
+            sync_select("dens_resine", "dens_rho_m", RESINES[resine_type4]["densite"])
+            rho_m4 = st.number_input("Densite matrice (kg/m3)", min_value=500, max_value=3000, key="dens_rho_m")
 
         vf4 = st.slider("Vf (%)", 30.0, 75.0, 60.0, step=0.5, key="dens_vf") / 100
 
@@ -628,10 +615,12 @@ with tab5:
     col_c1, col_c2 = st.columns(2)
     with col_c1:
         fibre_type5 = st.selectbox("Type de fibre", list(MATERIAUX_FIBRES.keys()), key="calc_fibre")
-        rho_f5 = st.number_input("Densite fibre (kg/m3)", value=MATERIAUX_FIBRES[fibre_type5], key="calc_rho_f")
+        sync_select("calc_fibre", "calc_rho_f", MATERIAUX_FIBRES[fibre_type5])
+        rho_f5 = st.number_input("Densite fibre (kg/m3)", min_value=500, max_value=5000, key="calc_rho_f")
     with col_c2:
         resine_type5 = st.selectbox("Type de resine", list(RESINES.keys()), key="calc_resine")
-        rho_m5 = st.number_input("Densite matrice (kg/m3)", value=RESINES[resine_type5]["densite"], key="calc_rho_m")
+        sync_select("calc_resine", "calc_rho_m", RESINES[resine_type5]["densite"])
+        rho_m5 = st.number_input("Densite matrice (kg/m3)", min_value=500, max_value=3000, key="calc_rho_m")
 
     nb_ech5 = st.number_input("Nombre d'echantillons", value=5, min_value=1, max_value=30, key="calc_nb")
 
@@ -887,7 +876,8 @@ with tab6:
         col1, col2 = st.columns(2)
         with col1:
             fibre_type6 = st.selectbox("Type de fibre", list(MATERIAUX_FIBRES.keys()), key="ep_fibre")
-            rho_f6 = st.number_input("Densite fibre (kg/m3)", value=MATERIAUX_FIBRES[fibre_type6], key="ep_rho_f")
+            sync_select("ep_fibre", "ep_rho_f", MATERIAUX_FIBRES[fibre_type6])
+            rho_f6 = st.number_input("Densite fibre (kg/m3)", min_value=500, max_value=5000, key="ep_rho_f")
         with col2:
             rho_m6 = st.number_input("Densite matrice (kg/m3)", value=1200, min_value=800, max_value=1500, key="ep_rho_m")
 
@@ -940,7 +930,8 @@ with tab6:
         col1, col2 = st.columns(2)
         with col1:
             fibre_type6b = st.selectbox("Type de fibre", list(MATERIAUX_FIBRES.keys()), key="ep_fibre2")
-            rho_f6b = st.number_input("Densite fibre (kg/m3)", value=MATERIAUX_FIBRES[fibre_type6b], key="ep_rho_f2")
+            sync_select("ep_fibre2", "ep_rho_f2", MATERIAUX_FIBRES[fibre_type6b])
+            rho_f6b = st.number_input("Densite fibre (kg/m3)", min_value=500, max_value=5000, key="ep_rho_f2")
         with col2:
             grammage6 = st.number_input("Grammage surfacique (g/m2)", value=300, min_value=100, max_value=2000, key="ep_gram")
 

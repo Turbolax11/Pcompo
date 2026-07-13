@@ -27,6 +27,8 @@ import requests
 import streamlit as st
 from bs4 import BeautifulSoup
 
+from car_data import MARQUES, modeles as modeles_de, finitions as finitions_de
+
 st.set_page_config(page_title="Chasseur d'occasions", page_icon="🚗", layout="wide")
 
 st.markdown(
@@ -39,14 +41,6 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # Referentiels
 # ---------------------------------------------------------------------------
-
-MARQUES = [
-    "Abarth", "Alfa Romeo", "Audi", "BMW", "Citroen", "Cupra", "Dacia", "DS",
-    "Fiat", "Ford", "Honda", "Hyundai", "Jaguar", "Jeep", "Kia", "Land Rover",
-    "Lexus", "Mazda", "Mercedes-Benz", "MG", "Mini", "Mitsubishi", "Nissan",
-    "Opel", "Peugeot", "Porsche", "Renault", "Seat", "Skoda", "Smart",
-    "Ssangyong", "Subaru", "Suzuki", "Tesla", "Toyota", "Volkswagen", "Volvo",
-]
 
 CARBURANTS = ["Tous", "Essence", "Diesel", "Hybride", "Electrique", "GPL"]
 BOITES = ["Toutes", "Manuelle", "Automatique"]
@@ -476,11 +470,29 @@ def export_excel(df):
 
 with st.sidebar:
     st.header("🔎 Criteres de recherche")
+    AUTRE = "Autre (saisie libre)..."
     marque = st.selectbox("Marque", [""] + MARQUES, index=0,
                           help="Laisser vide pour chercher toutes marques")
-    modele = st.text_input("Modele", placeholder="ex : Clio, 308, Golf ...")
-    finition = st.text_input("Finition / version",
-                             placeholder="ex : Intens, GT Line, Allure ...")
+
+    choix_modeles = modeles_de(marque)
+    if choix_modeles:
+        modele_sel = st.selectbox("Modele", [""] + choix_modeles + [AUTRE])
+        modele = st.text_input("Modele (saisie libre)") if modele_sel == AUTRE \
+            else modele_sel
+    else:
+        modele = st.text_input("Modele", placeholder="ex : Clio, 308, Golf ...")
+
+    choix_finitions = finitions_de(marque, modele or None)
+    if choix_finitions:
+        finition_sel = st.selectbox(
+            "Finition / version", [""] + choix_finitions + [AUTRE],
+            help="Finitions usuelles de la marque + versions specifiques du modele",
+        )
+        finition = st.text_input("Finition (saisie libre)") \
+            if finition_sel == AUTRE else finition_sel
+    else:
+        finition = st.text_input("Finition / version",
+                                 placeholder="ex : Intens, GT Line, Allure ...")
     options_txt = st.text_input(
         "Options recherchees (mots-cles, separes par des virgules)",
         placeholder="ex : toit ouvrant, camera, CarPlay",
